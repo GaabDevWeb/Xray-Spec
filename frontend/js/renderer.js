@@ -5,6 +5,13 @@ import { highlightEvidence } from "./highlight.js";
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
 const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
 
+const GAP_TAG = {
+  critical: "[CRITICAL GAP]",
+  high: "[HIGH GAP]",
+  medium: "[MEDIUM GAP]",
+  low: "[LOW GAP]",
+};
+
 function el(tag, className, html) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -18,31 +25,17 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-function countRelevant(gaps) {
-  if (!gaps?.length) return 0;
-  return gaps.filter((g) => g.severity === "critical" || g.severity === "high").length;
-}
-
-function buildDiagnosis(analysis) {
-  const gaps = analysis.gaps?.length ?? 0;
-  const ambig = analysis.ambiguities?.length ?? 0;
-  const assum = analysis.assumptions?.length ?? 0;
-  const relevant = countRelevant(analysis.gaps);
-
-  const parts = [];
-  if (gaps) parts.push(`${gaps} lacuna${gaps !== 1 ? "s" : ""}`);
-  if (ambig) parts.push(`${ambig} ambiguidade${ambig !== 1 ? "s" : ""}`);
-  if (assum) parts.push(`${assum} suposição${assum !== 1 ? "ões" : ""}`);
-
-  if (!parts.length) {
-    return "Nenhum problema estrutural detectado nesta inspeção.";
+function telemetryStatus(total) {
+  if (total <= 50) {
+    return { text: "[ SYSTEM STATUS: UNSTABLE / CRITICAL ]", className: "status-critical" };
   }
-
-  const summary = parts.join(" · ");
-  if (relevant > 0) {
-    return `${relevant} problema${relevant !== 1 ? "s" : ""} relevante${relevant !== 1 ? "s" : ""} · ${summary}`;
+  if (total <= 75) {
+    return { text: "[ SPEC HEALTH: DEGRADED / WARNING ]", className: "status-warning" };
   }
-  return summary;
+  if (total <= 90) {
+    return { text: "[ SPEC HEALTH: NOMINAL / STABLE ]", className: "status-stable" };
+  }
+  return { text: "[ SPEC HEALTH: OPTIMAL / CLEAR ]", className: "status-optimal" };
 }
 
 /**
@@ -51,37 +44,45 @@ function buildDiagnosis(analysis) {
  * @param {object} ctx - { textarea, previousScore, originalText }
  */
 export function render(analysis, ctx = {}) {
-  renderScore(analysis.score, analysis, ctx.previousScore);
+  renderTelemetry(analysis, ctx.previousScore);
   renderDimensionBars("dimension-bars", analysis.score.dimensions);
-  renderGaps(analysis.gaps, ctx.textarea);
-  renderAmbiguities(analysis.ambiguities, ctx.textarea);
-  renderAssumptions(analysis.assumptions);
-  renderSuggestions(analysis.suggestions);
-  renderDimensions(analysis.score.dimensions, ctx.textarea);
-  renderDiff(analysis, ctx);
+  renderStream(analysis, ctx);
 }
 
-function renderScore(score, analysis, previousScore) {
-  const value = document.getElementById("score-value");
-  const label = document.getElementById("score-label");
+function renderTelemetry(analysis, previousScore) {
+  const score = analysis.score;
+  const statusEl = document.getElementById("score-status");
+  const valueEl = document.getElementById("score-value");
   const delta = document.getElementById("score-delta");
-  const diagnosis = document.getElementById("scan-diagnosis");
+  const counters = document.getElementById("error-counters");
 
-  value.textContent = score.total;
-  label.textContent = score.label.toUpperCase();
-  diagnosis.textContent = buildDiagnosis(analysis);
+  const status = telemetryStatus(score.total);
+  statusEl.textContent = status.text;
+  statusEl.className = `telemetry-status mono ${status.className}`;
+  valueEl.textContent = score.total;
+
+  counters.innerHTML = "";
+  const counts = [
+    ["GAPS", analysis.gaps?.length ?? 0],
+    ["AMBIGUITIES", analysis.ambiguities?.length ?? 0],
+    ["ASSUMPTIONS", analysis.assumptions?.length ?? 0],
+    ["SUGGESTIONS", analysis.suggestions?.length ?? 0],
+  ];
+  counts.forEach(([label, count]) => {
+    counters.appendChild(el("span", "counter-cell", `${label}: ${count}`));
+  });
 
   if (typeof previousScore === "number") {
     const diff = score.total - previousScore;
     delta.hidden = false;
     if (diff > 0) {
-      delta.textContent = `+${diff} vs. scan anterior`;
+      delta.textContent = `Δ +${diff}`;
       delta.className = "score-delta up";
     } else if (diff < 0) {
-      delta.textContent = `${diff} vs. scan anterior`;
+      delta.textContent = `Δ ${diff}`;
       delta.className = "score-delta down";
     } else {
-      delta.textContent = "sem variação";
+      delta.textContent = "Δ 0";
       delta.className = "score-delta flat";
     }
   } else {
@@ -89,228 +90,263 @@ function renderScore(score, analysis, previousScore) {
   }
 }
 
-function renderDimensions(dimensions, textarea) {
-  const panel = document.querySelector('[data-panel="dimensions"]');
-  panel.innerHTML = "";
-  panel.appendChild(
-    panelHeader("Dimensões", "Detalhe por eixo de inspeção — justificativa, evidências e sugestões.")
-  );
+function renderStream(analysis, ctx) {
+  const stream = document.getElementById("inspection-stream");
+  stream.innerHTML = "";
 
-  DIMENSION_ORDER.forEach((key) => {
-    const dim = dimensions[key];
-    const wrapper = el("div", "dimension");
+  const sections = [
+    ["gaps", "GAPS", () => buildGaps(analysis.gaps, ctx.textarea)],
+    ["ambiguities", "AMBIGUITIES", () => buildAmbiguities(analysis.ambiguities, ctx.textarea)],
+    ["assumptions", "ASSUMPTIONS", () => buildAssumptions(analysis.assumptions)],
+    ["suggestions", "SUGGESTIONS", () => buildSuggestions(analysis.suggestions)],
+    [
+      "dimensions",
+      "DIMENSIONS",
+      () => buildDimensions(analysis.score.dimensions, ctx.textarea),
+    ],
+    ["diff", "CODE REVIEW", () => buildDiff(analysis, ctx)],
+  ];
 
-    const head = el("button", "dimension-head");
-    head.type = "button";
-    head.innerHTML =
-      `<span class="dimension-name">${DIMENSION_LABELS[key]}</span>` +
-      `<span class="dimension-score">${dim.score}</span>`;
+  sections.forEach(([id, title, fn]) => {
+    const section = el("section", "stream-section");
+    section.dataset.section = id;
 
-    const body = el("div", "dimension-body");
-    body.appendChild(
-      el("p", null, `<strong>Justificativa:</strong> ${escapeHtml(dim.justification)}`)
-    );
+    const head = el("div", "stream-section-head");
+    head.innerHTML = `<span class="stream-section-tag mono">// ${title}</span>`;
+    section.appendChild(head);
 
-    if (dim.evidence?.length) {
-      const evWrap = el("p", null, "<strong>Evidências:</strong> ");
-      dim.evidence.forEach((ev) => {
-        const chip = el("span", "chip", escapeHtml(ev));
-        chip.title = "Localizar no texto original";
-        chip.addEventListener("click", (e) => {
-          e.stopPropagation();
-          highlightEvidence(textarea, ev);
-        });
-        evWrap.appendChild(chip);
-      });
-      body.appendChild(evWrap);
-    }
-
-    body.appendChild(
-      el("p", "muted", `<strong>Sugestão:</strong> ${escapeHtml(dim.suggestion)}`)
-    );
-
-    head.addEventListener("click", () => wrapper.classList.toggle("open"));
-    wrapper.appendChild(head);
-    wrapper.appendChild(body);
-    panel.appendChild(wrapper);
+    const body = el("div", "stream-section-body");
+    body.appendChild(fn());
+    section.appendChild(body);
+    stream.appendChild(section);
   });
 }
 
-function renderGaps(gaps, textarea) {
-  const panel = document.querySelector('[data-panel="gaps"]');
-  panel.innerHTML = "";
-  panel.appendChild(
-    panelHeader("Lacunas detectadas", "Informação ausente ou incompleta que impede execução confiável.")
-  );
-
+function buildGaps(gaps, textarea) {
+  const frag = document.createDocumentFragment();
   if (!gaps?.length) {
-    panel.appendChild(emptyState("Nenhuma lacuna detectada nesta inspeção."));
-    return;
+    frag.appendChild(emptyLog("no gaps detected"));
+    return frag;
   }
 
   [...gaps]
     .sort((a, b) => (SEV_ORDER[a.severity] ?? 9) - (SEV_ORDER[b.severity] ?? 9))
     .forEach((gap) => {
-      const card = el("div", "item-card clickable");
-      card.innerHTML =
-        `<span class="sev sev-${gap.severity}">${gap.severity}</span>` +
-        `<p class="item-title">${escapeHtml(gap.description)}</p>` +
-        `<p class="item-question">${escapeHtml(gap.question)}</p>` +
-        `<p class="muted">${escapeHtml(gap.related_dimension)} · ${escapeHtml(gap.category)}</p>`;
-      card.addEventListener("click", () => highlightEvidence(textarea, gap.description));
-      panel.appendChild(card);
+      const entry = el("div", "log-entry clickable");
+      entry.innerHTML =
+        `<span class="log-tag">${GAP_TAG[gap.severity] || "[GAP]"}</span>` +
+        `<div class="log-body">` +
+        `<p class="log-msg">${escapeHtml(gap.description)}</p>` +
+        `<p class="log-detail">${escapeHtml(gap.question)}</p>` +
+        `<p class="log-meta">${escapeHtml(gap.related_dimension)} · ${escapeHtml(gap.category)}</p>` +
+        `</div>`;
+      entry.addEventListener("click", () => highlightEvidence(textarea, gap.description));
+      frag.appendChild(entry);
     });
+  return frag;
 }
 
-function renderAmbiguities(ambiguities, textarea) {
-  const panel = document.querySelector('[data-panel="ambiguities"]');
-  panel.innerHTML = "";
-  panel.appendChild(
-    panelHeader("Ambiguidades", "Termos ou trechos com múltiplas interpretações possíveis.")
-  );
-
+function buildAmbiguities(ambiguities, textarea) {
+  const frag = document.createDocumentFragment();
   if (!ambiguities?.length) {
-    panel.appendChild(emptyState("Nenhuma ambiguidade detectada."));
-    return;
+    frag.appendChild(emptyLog("no ambiguities detected"));
+    return frag;
   }
 
   ambiguities.forEach((amb) => {
-    const card = el("div", "item-card");
     const interps = (amb.interpretations || [])
       .map((i) => `<li>${escapeHtml(i)}</li>`)
       .join("");
-    card.innerHTML =
-      `<p class="item-title mono">“${escapeHtml(amb.term)}”</p>` +
-      `<p class="muted">${escapeHtml(amb.context)}</p>` +
-      `<p><strong>Interpretações:</strong></p><ul>${interps}</ul>` +
-      `<p class="muted"><strong>Sugestão:</strong> ${escapeHtml(amb.suggestion)}</p>`;
+    const entry = el("div", "log-entry");
+    entry.innerHTML =
+      `<span class="log-tag">[WARNING AMBIGUITY]</span>` +
+      `<div class="log-body">` +
+      `<p class="log-msg mono">"${escapeHtml(amb.term)}"</p>` +
+      `<p class="log-detail">${escapeHtml(amb.context)}</p>` +
+      `<ul class="log-list">${interps}</ul>` +
+      `<p class="log-meta">→ ${escapeHtml(amb.suggestion)}</p>` +
+      `</div>`;
     if (amb.term) {
-      const chip = el("span", "chip", "Localizar termo");
-      chip.addEventListener("click", () => highlightEvidence(textarea, amb.term));
-      card.appendChild(chip);
+      const locate = el("button", "locate-btn mono", "locate");
+      locate.type = "button";
+      locate.addEventListener("click", () => highlightEvidence(textarea, amb.term));
+      entry.querySelector(".log-body").appendChild(locate);
     }
-    panel.appendChild(card);
+    frag.appendChild(entry);
   });
+  return frag;
 }
 
-function renderAssumptions(assumptions) {
-  const panel = document.querySelector('[data-panel="assumptions"]');
-  panel.innerHTML = "";
-  panel.appendChild(
-    panelHeader("Suposições ocultas", "Premissas não declaradas que podem gerar risco na execução.")
-  );
-
+function buildAssumptions(assumptions) {
+  const frag = document.createDocumentFragment();
   if (!assumptions?.length) {
-    panel.appendChild(emptyState("Nenhuma suposição oculta detectada."));
-    return;
+    frag.appendChild(emptyLog("no hidden assumptions detected"));
+    return frag;
   }
 
   assumptions.forEach((asm) => {
-    const card = el("div", "item-card");
-    card.innerHTML =
-      `<p class="item-title">${escapeHtml(asm.assumption)}</p>` +
-      `<p class="muted"><strong>Risco:</strong> ${escapeHtml(asm.risk)}</p>` +
-      `<p class="item-question">${escapeHtml(asm.question)}</p>`;
-    panel.appendChild(card);
+    const entry = el("div", "log-entry");
+    entry.innerHTML =
+      `<span class="log-tag">[HIDDEN ASSUMPTION]</span>` +
+      `<div class="log-body">` +
+      `<p class="log-msg">${escapeHtml(asm.assumption)}</p>` +
+      `<p class="log-detail">risk: ${escapeHtml(asm.risk)}</p>` +
+      `<p class="log-meta">${escapeHtml(asm.question)}</p>` +
+      `</div>`;
+    frag.appendChild(entry);
   });
+  return frag;
 }
 
-function renderSuggestions(suggestions) {
-  const panel = document.querySelector('[data-panel="suggestions"]');
-  panel.innerHTML = "";
-  panel.appendChild(
-    panelHeader("Sugestões", "Ações priorizadas para elevar a qualidade da especificação.")
-  );
-
+function buildSuggestions(suggestions) {
+  const frag = document.createDocumentFragment();
   if (!suggestions?.length) {
-    panel.appendChild(emptyState("Nenhuma sugestão adicional."));
-    return;
+    frag.appendChild(emptyLog("no suggestions"));
+    return frag;
   }
 
   [...suggestions]
     .sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9))
     .forEach((s) => {
-      const card = el("div", "item-card");
-      card.innerHTML =
-        `<span class="sev sev-${s.priority === "high" ? "high" : s.priority === "medium" ? "medium" : "low"}">${s.priority}</span>` +
-        `<p class="item-title">${escapeHtml(s.text)}</p>` +
-        `<p class="muted">${escapeHtml(s.dimension)}</p>`;
-      panel.appendChild(card);
+      const tag =
+        s.priority === "high"
+          ? "[HIGH PRIORITY]"
+          : s.priority === "medium"
+            ? "[MEDIUM PRIORITY]"
+            : "[LOW PRIORITY]";
+      const entry = el("div", "log-entry");
+      entry.innerHTML =
+        `<span class="log-tag">${tag}</span>` +
+        `<div class="log-body">` +
+        `<p class="log-msg">${escapeHtml(s.text)}</p>` +
+        `<p class="log-meta">${escapeHtml(s.dimension)}</p>` +
+        `</div>`;
+      frag.appendChild(entry);
     });
+  return frag;
 }
 
-function renderDiff(analysis, ctx) {
-  const panel = document.querySelector('[data-panel="diff"]');
-  panel.innerHTML = "";
+function buildDimensions(dimensions, textarea) {
+  const frag = document.createDocumentFragment();
 
-  panel.appendChild(
-    panelHeader("Revisão", "Comparativo before/after — revise marcadores antes de adotar.")
-  );
+  DIMENSION_ORDER.forEach((key) => {
+    const dim = dimensions[key];
+    const block = el("div", "dim-block");
 
-  const disclaimer = el(
-    "div",
-    "diff-disclaimer",
-    "Esta versão não substitui sua especificação. Ela estrutura o que você escreveu — revise os marcadores <strong>[A DEFINIR]</strong> e preencha as decisões que só você pode tomar."
-  );
-  panel.appendChild(disclaimer);
+    const head = el("button", "dim-block-head mono");
+    head.type = "button";
+    head.innerHTML =
+      `<span>${DIMENSION_LABELS[key]}</span><span class="dim-block-score">${dim.score}</span>`;
 
-  const grid = el("div", "diff-grid");
+    const body = el("div", "dim-block-body");
+    body.appendChild(el("p", "log-detail", escapeHtml(dim.justification)));
+
+    if (dim.evidence?.length) {
+      const evRow = el("div", "evidence-row");
+      dim.evidence.forEach((ev) => {
+        const chip = el("button", "evidence-chip mono", escapeHtml(ev));
+        chip.type = "button";
+        chip.title = "locate in source";
+        chip.addEventListener("click", (e) => {
+          e.stopPropagation();
+          highlightEvidence(textarea, ev);
+        });
+        evRow.appendChild(chip);
+      });
+      body.appendChild(evRow);
+    }
+
+    body.appendChild(el("p", "log-meta", `→ ${escapeHtml(dim.suggestion)}`));
+    head.addEventListener("click", () => block.classList.toggle("open"));
+    block.appendChild(head);
+    block.appendChild(body);
+    frag.appendChild(block);
+  });
+  return frag;
+}
+
+function buildDiff(analysis, ctx) {
+  const frag = document.createDocumentFragment();
   const originalText = ctx.originalText ?? (ctx.textarea ? ctx.textarea.value : "");
   const improvedText = analysis.improved_spec?.text || "";
 
-  const before = el("div", "diff-col");
-  before.innerHTML =
-    `<div class="diff-col-header"><h4>Before</h4><span class="diff-badge">original</span></div>`;
-  const beforeText = el("div", "diff-text");
-  beforeText.textContent = originalText;
-  before.appendChild(beforeText);
-
-  const after = el("div", "diff-col");
-  after.innerHTML =
-    `<div class="diff-col-header"><h4>After</h4><span class="diff-badge">proposta</span></div>`;
-  const afterText = el("div", "diff-text after");
-  afterText.innerHTML = escapeHtml(improvedText).replace(
-    /\[A DEFINIR[^\]]*\]/g,
-    (m) => `<mark class="todo">${m}</mark>`
+  frag.appendChild(
+    el(
+      "p",
+      "diff-notice mono",
+      "review required — resolve all <strong>[A DEFINIR]</strong> markers before adoption"
+    )
   );
-  after.appendChild(afterText);
 
-  grid.appendChild(before);
-  grid.appendChild(after);
-  panel.appendChild(grid);
+  const split = el("div", "diff-split");
+  split.appendChild(buildDiffPane("before", "original", originalText));
+  split.appendChild(buildDiffPane("after", "proposed", improvedText, originalText));
+  frag.appendChild(split);
 
   const changes = analysis.improved_spec?.changes_summary || [];
   if (changes.length) {
     const cs = el("div", "changes-summary");
-    cs.appendChild(el("p", null, "Resumo das mudanças"));
+    cs.appendChild(el("p", "mono", "// CHANGES"));
     const ul = el("ul");
     changes.forEach((c) => ul.appendChild(el("li", null, escapeHtml(c))));
     cs.appendChild(ul);
-    panel.appendChild(cs);
+    frag.appendChild(cs);
   }
 
   const actions = el("div", "diff-actions");
-  const copyBtn = el("button", "secondary-btn", "Copiar after");
+  const copyBtn = el("button", "secondary-btn mono", "copy after");
   copyBtn.type = "button";
   copyBtn.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(improvedText);
-      copyBtn.textContent = "Copiado";
-      setTimeout(() => (copyBtn.textContent = "Copiar after"), 1500);
+      copyBtn.textContent = "copied";
+      setTimeout(() => (copyBtn.textContent = "copy after"), 1500);
     } catch {
-      copyBtn.textContent = "Falha ao copiar";
+      copyBtn.textContent = "copy failed";
     }
   });
   actions.appendChild(copyBtn);
-  panel.appendChild(actions);
+  frag.appendChild(actions);
+
+  return frag;
 }
 
-function panelHeader(title, description) {
-  const header = el("div", "panel-header");
-  header.innerHTML = `<h3>${escapeHtml(title)}</h3><p>${escapeHtml(description)}</p>`;
-  return header;
+function buildDiffPane(side, badge, text, originalText = null) {
+  const isAfter = side === "after";
+  const pane = el("div", `diff-pane diff-pane--${side}`);
+  pane.innerHTML =
+    `<div class="diff-pane-bar mono"><span>${side}</span><span class="diff-badge">${badge}</span></div>`;
+
+  const lines = el("div", "diff-lines");
+  const beforeLines = (originalText ?? text).split("\n");
+  const sourceLines = text.split("\n");
+
+  sourceLines.forEach((line, i) => {
+    const row = el("div", "diff-line");
+    const ln = el("span", "diff-ln mono", String(i + 1));
+    const code = el("span", "diff-code mono");
+
+    if (isAfter) {
+      const changed = i >= beforeLines.length || line !== beforeLines[i];
+      if (changed) row.classList.add("diff-line--modified");
+      if (/\[A DEFINIR[^\]]*\]/.test(line)) row.classList.add("diff-line--todo");
+      code.innerHTML = escapeHtml(line).replace(
+        /\[A DEFINIR[^\]]*\]/g,
+        (m) => `<mark class="todo-mark">${m}</mark>`
+      );
+    } else {
+      code.textContent = line;
+    }
+
+    row.appendChild(ln);
+    row.appendChild(code);
+    lines.appendChild(row);
+  });
+
+  pane.appendChild(lines);
+  return pane;
 }
 
-function emptyState(message) {
-  return el("p", "empty-state", escapeHtml(message));
+function emptyLog(message) {
+  return el("p", "log-empty mono", `// ${message}`);
 }

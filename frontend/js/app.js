@@ -39,8 +39,7 @@ function cacheDom() {
   dom.errorRegion = document.getElementById("error-region");
   dom.errorMessage = document.getElementById("error-message");
   dom.retryBtn = document.getElementById("btn-retry");
-  dom.tabs = document.querySelectorAll(".tab-btn");
-  dom.panels = document.querySelectorAll(".tab-panel");
+  dom.streamFilters = document.querySelectorAll(".filter-btn");
   dom.historyBtn = document.getElementById("btn-history");
   dom.helpBtn = document.getElementById("btn-help");
   dom.historyPanel = document.getElementById("history-panel");
@@ -65,8 +64,8 @@ function bindEvents() {
   });
   dom.retryBtn.addEventListener("click", runAnalysis);
 
-  dom.tabs.forEach((tab) =>
-    tab.addEventListener("click", () => switchTab(tab.dataset.tab))
+  dom.streamFilters.forEach((btn) =>
+    btn.addEventListener("click", () => toggleSection(btn.dataset.filter, btn))
   );
 
   dom.historyBtn.addEventListener("click", openHistory);
@@ -142,7 +141,7 @@ async function runAnalysis() {
     history.save({ inputText: text, inputType: type, analysis });
     render(analysis, { textarea: dom.input, originalText: text, previousScore });
     previousScore = analysis.score.total;
-    switchTab("gaps");
+    resetStreamFilters();
     setState(STATE.RESULTS);
     dom.skeleton.hidden = true;
     dom.results.hidden = false;
@@ -172,13 +171,21 @@ function hideError() {
   dom.retryBtn.hidden = true;
 }
 
-function switchTab(name) {
-  dom.tabs.forEach((t) => {
-    const active = t.dataset.tab === name;
-    t.classList.toggle("active", active);
-    t.setAttribute("aria-selected", active ? "true" : "false");
+function toggleSection(name, btn) {
+  const section = document.querySelector(`[data-section="${name}"]`);
+  if (!section || !btn) return;
+  const collapsed = section.classList.toggle("collapsed");
+  const shown = !collapsed;
+  btn.classList.toggle("active", shown);
+  btn.setAttribute("aria-pressed", shown ? "true" : "false");
+}
+
+function resetStreamFilters() {
+  dom.streamFilters.forEach((btn) => {
+    btn.classList.add("active");
+    btn.setAttribute("aria-pressed", "true");
   });
-  dom.panels.forEach((p) => p.classList.toggle("active", p.dataset.panel === name));
+  document.querySelectorAll(".stream-section").forEach((s) => s.classList.remove("collapsed"));
 }
 
 /* ----- Histórico ----- */
@@ -229,7 +236,7 @@ function openHistoryItem(item) {
     originalText: item.input_text,
     previousScore: null,
   });
-  switchTab("gaps");
+  resetStreamFilters();
   setState(STATE.RESULTS);
   dom.skeleton.hidden = true;
   dom.results.hidden = false;

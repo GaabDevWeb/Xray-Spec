@@ -55,7 +55,7 @@
         id="spec-input"
         class="spec-textarea mono"
         rows="10"
-        placeholder="Cole ou digite a especificação a inspecionar…"
+        placeholder="// Paste your specification, PRD, briefing or prompt here...."
         aria-describedby="input-hint char-counter"></textarea>
 
       <div class="input-footer">
@@ -94,39 +94,31 @@
     </section>
 
     <section id="results" class="scan-results" aria-label="Resultados da inspeção" hidden>
-      <header class="scan-hero">
-        <span class="scan-eyebrow mono">SPEC HEALTH</span>
-        <div class="scan-score-row">
-          <div id="score-badge" class="scan-score">
-            <span id="score-value">0</span>
-          </div>
-          <div class="scan-meta">
-            <span id="score-label" class="scan-band">—</span>
-            <span id="score-delta" class="score-delta" hidden></span>
-          </div>
+      <header class="telemetry" id="telemetry-header">
+        <div class="telemetry-row">
+          <span id="score-status" class="telemetry-status mono">[ SYSTEM STATUS: — ]</span>
+          <span id="score-delta" class="score-delta" hidden></span>
         </div>
-        <p id="scan-diagnosis" class="scan-diagnosis"></p>
+        <div class="telemetry-score-row">
+          <span class="telemetry-label mono">SPEC HEALTH</span>
+          <span id="score-value" class="telemetry-score">0</span>
+          <span class="telemetry-max mono">/100</span>
+        </div>
+        <div id="error-counters" class="error-counters mono" aria-label="Contadores de problemas"></div>
       </header>
 
       <div id="dimension-bars" class="dimension-bars" aria-label="Dimensões"></div>
 
-      <nav class="tabs" role="tablist" aria-label="Findings">
-        <button class="tab-btn active" role="tab" data-tab="gaps" aria-selected="true">Lacunas</button>
-        <button class="tab-btn" role="tab" data-tab="ambiguities" aria-selected="false">Ambiguidades</button>
-        <button class="tab-btn" role="tab" data-tab="assumptions" aria-selected="false">Suposições</button>
-        <button class="tab-btn" role="tab" data-tab="suggestions" aria-selected="false">Sugestões</button>
-        <button class="tab-btn" role="tab" data-tab="dimensions" aria-selected="false">Dimensões</button>
-        <button class="tab-btn" role="tab" data-tab="diff" aria-selected="false">Revisão</button>
+      <nav class="stream-filters" aria-label="Filtros de seção">
+        <button type="button" class="filter-btn active" data-filter="gaps" aria-pressed="true">gaps</button>
+        <button type="button" class="filter-btn active" data-filter="ambiguities" aria-pressed="true">ambiguities</button>
+        <button type="button" class="filter-btn active" data-filter="assumptions" aria-pressed="true">assumptions</button>
+        <button type="button" class="filter-btn active" data-filter="suggestions" aria-pressed="true">suggestions</button>
+        <button type="button" class="filter-btn active" data-filter="dimensions" aria-pressed="true">dimensions</button>
+        <button type="button" class="filter-btn active" data-filter="diff" aria-pressed="true">review</button>
       </nav>
 
-      <div class="tab-panels">
-        <div class="tab-panel active" data-panel="gaps" role="tabpanel"></div>
-        <div class="tab-panel" data-panel="ambiguities" role="tabpanel"></div>
-        <div class="tab-panel" data-panel="assumptions" role="tabpanel"></div>
-        <div class="tab-panel" data-panel="suggestions" role="tabpanel"></div>
-        <div class="tab-panel" data-panel="dimensions" role="tabpanel"></div>
-        <div class="tab-panel" data-panel="diff" role="tabpanel"></div>
-      </div>
+      <div id="inspection-stream" class="inspection-stream" aria-label="Log de inspeção"></div>
     </section>
   </main>
 
