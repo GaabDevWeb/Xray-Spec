@@ -12,20 +12,15 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5.0.21/400.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5.0.21/500.css" />
   <link rel="stylesheet" href="css/styles.css" />
+  <meta name="description" content="Xray — spec inspection engine. Diagnose gaps, ambiguities and hidden assumptions before shipping to AI or dev teams." />
+  <meta name="theme-color" content="#1E1E1E" />
 </head>
 <body>
+  <div class="scan-grid" aria-hidden="true"></div>
   <header class="app-header">
     <div class="brand">
-      <span class="brand-mark" aria-hidden="true">
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.5"/>
-          <line x1="9" y1="2" x2="9" y2="16" stroke="currentColor" stroke-width="1"/>
-          <line x1="2" y1="9" x2="16" y2="9" stroke="currentColor" stroke-width="1"/>
-        </svg>
-      </span>
       <div class="brand-text">
-        <h1>XRAY</h1>
-        <span class="brand-tagline">spec inspection</span>
+        <h1>X<span class="brand-accent">RAY</span></h1>
       </div>
     </div>
     <nav class="header-actions" aria-label="Ações">
@@ -43,8 +38,13 @@
       <div class="section-eyebrow">Inspection target</div>
 
       <div class="input-toolbar">
-        <label for="type-select" class="field-label">Tipo</label>
-        <select id="type-select" class="select">
+        <span class="type-label mono">type</span>
+        <div class="type-switch" role="group" aria-label="Tipo de especificação">
+          <button type="button" class="type-seg active" data-value="prompt">prompt</button>
+          <button type="button" class="type-seg" data-value="requirement">requisito</button>
+          <button type="button" class="type-seg" data-value="briefing">briefing</button>
+        </div>
+        <select id="type-select" class="select-native" hidden aria-hidden="true" tabindex="-1">
           <option value="prompt">Prompt</option>
           <option value="requirement">Requisito</option>
           <option value="briefing">Briefing</option>
@@ -109,15 +109,6 @@
 
       <div id="dimension-bars" class="dimension-bars" aria-label="Dimensões"></div>
 
-      <nav class="stream-filters" aria-label="Filtros de seção">
-        <button type="button" class="filter-btn active" data-filter="gaps" aria-pressed="true">gaps</button>
-        <button type="button" class="filter-btn active" data-filter="ambiguities" aria-pressed="true">ambiguities</button>
-        <button type="button" class="filter-btn active" data-filter="assumptions" aria-pressed="true">assumptions</button>
-        <button type="button" class="filter-btn active" data-filter="suggestions" aria-pressed="true">suggestions</button>
-        <button type="button" class="filter-btn active" data-filter="dimensions" aria-pressed="true">dimensions</button>
-        <button type="button" class="filter-btn active" data-filter="diff" aria-pressed="true">review</button>
-      </nav>
-
       <div id="inspection-stream" class="inspection-stream" aria-label="Log de inspeção"></div>
     </section>
   </main>
@@ -153,6 +144,12 @@
   </aside>
 
   <div id="overlay" class="overlay" hidden></div>
+
+  <footer class="status-bar mono" aria-hidden="true">
+    <span>xray v1.0</span>
+    <span class="status-bar-sep">·</span>
+    <span id="status-provider">spec inspection engine</span>
+  </footer>
 
   <script type="module" src="js/app.js"></script>
 </body>

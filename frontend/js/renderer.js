@@ -1,4 +1,3 @@
-import { DIMENSION_ORDER, DIMENSION_LABELS } from "./config.js";
 import { renderDimensionBars } from "./dimensions.js";
 import { highlightEvidence } from "./highlight.js";
 
@@ -12,6 +11,13 @@ const GAP_TAG = {
   low: "[LOW GAP]",
 };
 
+const COUNTER_FILTERS = {
+  GAPS: "gaps",
+  AMBIGUITIES: "ambiguities",
+  ASSUMPTIONS: "assumptions",
+  SUGGESTIONS: "suggestions",
+};
+
 function el(tag, className, html) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -23,6 +29,11 @@ function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str ?? "";
   return div.innerHTML;
+}
+
+function gapTagClass(severity) {
+  if (severity === "critical" || severity === "high") return "log-tag log-tag--critical";
+  return "log-tag log-tag--warning";
 }
 
 function telemetryStatus(total) {
@@ -69,7 +80,13 @@ function renderTelemetry(analysis, previousScore) {
     ["SUGGESTIONS", analysis.suggestions?.length ?? 0],
   ];
   counts.forEach(([label, count]) => {
-    counters.appendChild(el("span", "counter-cell", `${label}: ${count}`));
+    const btn = el("button", "counter-cell");
+    btn.type = "button";
+    btn.dataset.filter = COUNTER_FILTERS[label];
+    btn.setAttribute("aria-pressed", "false");
+    btn.setAttribute("aria-label", `Filtrar ${label.toLowerCase()}`);
+    btn.textContent = `${label}: ${count}`;
+    counters.appendChild(btn);
   });
 
   if (typeof previousScore === "number") {
@@ -99,11 +116,6 @@ function renderStream(analysis, ctx) {
     ["ambiguities", "AMBIGUITIES", () => buildAmbiguities(analysis.ambiguities, ctx.textarea)],
     ["assumptions", "ASSUMPTIONS", () => buildAssumptions(analysis.assumptions)],
     ["suggestions", "SUGGESTIONS", () => buildSuggestions(analysis.suggestions)],
-    [
-      "dimensions",
-      "DIMENSIONS",
-      () => buildDimensions(analysis.score.dimensions, ctx.textarea),
-    ],
     ["diff", "CODE REVIEW", () => buildDiff(analysis, ctx)],
   ];
 
@@ -134,7 +146,7 @@ function buildGaps(gaps, textarea) {
     .forEach((gap) => {
       const entry = el("div", "log-entry clickable");
       entry.innerHTML =
-        `<span class="log-tag">${GAP_TAG[gap.severity] || "[GAP]"}</span>` +
+        `<span class="${gapTagClass(gap.severity)}">${GAP_TAG[gap.severity] || "[GAP]"}</span>` +
         `<div class="log-body">` +
         `<p class="log-msg">${escapeHtml(gap.description)}</p>` +
         `<p class="log-detail">${escapeHtml(gap.question)}</p>` +
@@ -159,7 +171,7 @@ function buildAmbiguities(ambiguities, textarea) {
       .join("");
     const entry = el("div", "log-entry");
     entry.innerHTML =
-      `<span class="log-tag">[WARNING AMBIGUITY]</span>` +
+      `<span class="log-tag log-tag--warning">[WARNING AMBIGUITY]</span>` +
       `<div class="log-body">` +
       `<p class="log-msg mono">"${escapeHtml(amb.term)}"</p>` +
       `<p class="log-detail">${escapeHtml(amb.context)}</p>` +
@@ -187,7 +199,7 @@ function buildAssumptions(assumptions) {
   assumptions.forEach((asm) => {
     const entry = el("div", "log-entry");
     entry.innerHTML =
-      `<span class="log-tag">[HIDDEN ASSUMPTION]</span>` +
+      `<span class="log-tag log-tag--warning">[HIDDEN ASSUMPTION]</span>` +
       `<div class="log-body">` +
       `<p class="log-msg">${escapeHtml(asm.assumption)}</p>` +
       `<p class="log-detail">risk: ${escapeHtml(asm.risk)}</p>` +
@@ -216,52 +228,13 @@ function buildSuggestions(suggestions) {
             : "[LOW PRIORITY]";
       const entry = el("div", "log-entry");
       entry.innerHTML =
-        `<span class="log-tag">${tag}</span>` +
+        `<span class="log-tag log-tag--info">${tag}</span>` +
         `<div class="log-body">` +
         `<p class="log-msg">${escapeHtml(s.text)}</p>` +
         `<p class="log-meta">${escapeHtml(s.dimension)}</p>` +
         `</div>`;
       frag.appendChild(entry);
     });
-  return frag;
-}
-
-function buildDimensions(dimensions, textarea) {
-  const frag = document.createDocumentFragment();
-
-  DIMENSION_ORDER.forEach((key) => {
-    const dim = dimensions[key];
-    const block = el("div", "dim-block");
-
-    const head = el("button", "dim-block-head mono");
-    head.type = "button";
-    head.innerHTML =
-      `<span>${DIMENSION_LABELS[key]}</span><span class="dim-block-score">${dim.score}</span>`;
-
-    const body = el("div", "dim-block-body");
-    body.appendChild(el("p", "log-detail", escapeHtml(dim.justification)));
-
-    if (dim.evidence?.length) {
-      const evRow = el("div", "evidence-row");
-      dim.evidence.forEach((ev) => {
-        const chip = el("button", "evidence-chip mono", escapeHtml(ev));
-        chip.type = "button";
-        chip.title = "locate in source";
-        chip.addEventListener("click", (e) => {
-          e.stopPropagation();
-          highlightEvidence(textarea, ev);
-        });
-        evRow.appendChild(chip);
-      });
-      body.appendChild(evRow);
-    }
-
-    body.appendChild(el("p", "log-meta", `→ ${escapeHtml(dim.suggestion)}`));
-    head.addEventListener("click", () => block.classList.toggle("open"));
-    block.appendChild(head);
-    block.appendChild(body);
-    frag.appendChild(block);
-  });
   return frag;
 }
 

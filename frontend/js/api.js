@@ -28,11 +28,11 @@ function mapStatus(status, detail) {
 export async function checkHealth() {
   try {
     const res = await fetch(`${API_BASE}/api/health`, { method: "GET" });
-    if (!res.ok) return false;
+    if (!res.ok) return { ok: false, provider: null };
     const data = await res.json();
-    return data.status === "ok";
+    return { ok: data.status === "ok", provider: data.provider ?? null };
   } catch {
-    return false;
+    return { ok: false, provider: null };
   }
 }
 

@@ -18,6 +18,7 @@ const dom = {};
 let state = STATE.INITIALIZING;
 let previousScore = null;
 let online = false;
+let activeStreamFilter = null;
 
 document.addEventListener("DOMContentLoaded", init);
 
@@ -30,6 +31,7 @@ function init() {
 function cacheDom() {
   dom.input = document.getElementById("spec-input");
   dom.typeSelect = document.getElementById("type-select");
+  dom.typeSegments = document.querySelectorAll(".type-seg");
   dom.analyzeBtn = document.getElementById("btn-analyze");
   dom.counter = document.getElementById("char-counter");
   dom.hint = document.getElementById("input-hint");
@@ -39,7 +41,7 @@ function cacheDom() {
   dom.errorRegion = document.getElementById("error-region");
   dom.errorMessage = document.getElementById("error-message");
   dom.retryBtn = document.getElementById("btn-retry");
-  dom.streamFilters = document.querySelectorAll(".filter-btn");
+  dom.errorCounters = document.getElementById("error-counters");
   dom.historyBtn = document.getElementById("btn-history");
   dom.helpBtn = document.getElementById("btn-help");
   dom.historyPanel = document.getElementById("history-panel");
@@ -51,6 +53,7 @@ function cacheDom() {
   dom.clearHistory = document.getElementById("btn-clear-history");
   dom.overlay = document.getElementById("overlay");
   dom.analyzeBtnLabel = dom.analyzeBtn.querySelector(".btn-label");
+  dom.statusProvider = document.getElementById("status-provider");
 }
 
 function bindEvents() {
@@ -64,8 +67,10 @@ function bindEvents() {
   });
   dom.retryBtn.addEventListener("click", runAnalysis);
 
-  dom.streamFilters.forEach((btn) =>
-    btn.addEventListener("click", () => toggleSection(btn.dataset.filter, btn))
+  dom.errorCounters.addEventListener("click", onCounterFilterClick);
+
+  dom.typeSegments.forEach((btn) =>
+    btn.addEventListener("click", () => syncTypeSegments(btn.dataset.value))
   );
 
   dom.historyBtn.addEventListener("click", openHistory);
@@ -86,7 +91,13 @@ async function bootstrap() {
 }
 
 async function refreshConnectivity() {
-  online = navigator.onLine && (await checkHealth());
+  const health = await checkHealth();
+  online = navigator.onLine && health.ok;
+  if (dom.statusProvider) {
+    dom.statusProvider.textContent = health.ok && health.provider
+      ? `${health.provider} · online`
+      : "offline";
+  }
   if (online) {
     dom.offlineBanner.hidden = true;
     if (state === STATE.OFFLINE || state === STATE.INITIALIZING) setState(STATE.IDLE);
@@ -141,7 +152,7 @@ async function runAnalysis() {
     history.save({ inputText: text, inputType: type, analysis });
     render(analysis, { textarea: dom.input, originalText: text, previousScore });
     previousScore = analysis.score.total;
-    resetStreamFilters();
+    resetStreamFilter();
     setState(STATE.RESULTS);
     dom.skeleton.hidden = true;
     dom.results.hidden = false;
@@ -171,21 +182,47 @@ function hideError() {
   dom.retryBtn.hidden = true;
 }
 
-function toggleSection(name, btn) {
-  const section = document.querySelector(`[data-section="${name}"]`);
-  if (!section || !btn) return;
-  const collapsed = section.classList.toggle("collapsed");
-  const shown = !collapsed;
-  btn.classList.toggle("active", shown);
-  btn.setAttribute("aria-pressed", shown ? "true" : "false");
+function syncTypeSegments(value) {
+  dom.typeSelect.value = value;
+  dom.typeSegments.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.value === value);
+  });
 }
 
-function resetStreamFilters() {
-  dom.streamFilters.forEach((btn) => {
-    btn.classList.add("active");
-    btn.setAttribute("aria-pressed", "true");
+function onCounterFilterClick(e) {
+  const btn = e.target.closest(".counter-cell");
+  if (!btn?.dataset.filter) return;
+
+  const filter = btn.dataset.filter;
+  if (activeStreamFilter === filter) {
+    resetStreamFilter();
+  } else {
+    applyStreamFilter(filter);
+  }
+}
+
+function applyStreamFilter(filter) {
+  activeStreamFilter = filter;
+  dom.errorCounters.querySelectorAll(".counter-cell").forEach((cell) => {
+    const active = cell.dataset.filter === filter;
+    cell.classList.toggle("active", active);
+    cell.setAttribute("aria-pressed", active ? "true" : "false");
   });
-  document.querySelectorAll(".stream-section").forEach((s) => s.classList.remove("collapsed"));
+  document.querySelectorAll(".stream-section").forEach((section) => {
+    const show = section.dataset.section === filter;
+    section.classList.toggle("stream-section--hidden", !show);
+  });
+}
+
+function resetStreamFilter() {
+  activeStreamFilter = null;
+  dom.errorCounters?.querySelectorAll(".counter-cell").forEach((cell) => {
+    cell.classList.remove("active");
+    cell.setAttribute("aria-pressed", "false");
+  });
+  document.querySelectorAll(".stream-section").forEach((section) => {
+    section.classList.remove("stream-section--hidden");
+  });
 }
 
 /* ----- Histórico ----- */
@@ -236,7 +273,7 @@ function openHistoryItem(item) {
     originalText: item.input_text,
     previousScore: null,
   });
-  resetStreamFilters();
+  resetStreamFilter();
   setState(STATE.RESULTS);
   dom.skeleton.hidden = true;
   dom.results.hidden = false;
@@ -246,7 +283,7 @@ function openHistoryItem(item) {
 
 function useAsBase(item) {
   dom.input.value = item.input_text;
-  dom.typeSelect.value = item.input_type;
+  syncTypeSegments(item.input_type);
   previousScore = item.score_total;
   closeDrawers();
   onInput();

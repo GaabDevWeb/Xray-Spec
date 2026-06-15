@@ -1,6 +1,46 @@
-cursor/AGENT.md
-cursor/FLOWCHART.md
-cursor/IDEIA.md
-cursor/PRD.md
-docs/PROMPTS_TESTE.md
+# ── Secrets ──
 .env
+.env.local
+.env.*.local
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# ── Node (future) ──
+node_modules/
+npm-debug.log*
+
+# ── IDE & OS ──
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Logs & runtime ──
+*.log
+.cache/
+
+# ── Local dev artifacts (not shipped) ──
+cursor/
+docs/
+.agent_history.md
