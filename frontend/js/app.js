@@ -190,7 +190,7 @@ function syncTypeSegments(value) {
 }
 
 function onCounterFilterClick(e) {
-  const btn = e.target.closest(".counter-cell");
+  const btn = e.target.closest(".finding-cell");
   if (!btn?.dataset.filter) return;
 
   const filter = btn.dataset.filter;
@@ -203,7 +203,7 @@ function onCounterFilterClick(e) {
 
 function applyStreamFilter(filter) {
   activeStreamFilter = filter;
-  dom.errorCounters.querySelectorAll(".counter-cell").forEach((cell) => {
+  dom.errorCounters.querySelectorAll(".finding-cell").forEach((cell) => {
     const active = cell.dataset.filter === filter;
     cell.classList.toggle("active", active);
     cell.setAttribute("aria-pressed", active ? "true" : "false");
@@ -216,7 +216,7 @@ function applyStreamFilter(filter) {
 
 function resetStreamFilter() {
   activeStreamFilter = null;
-  dom.errorCounters?.querySelectorAll(".counter-cell").forEach((cell) => {
+  dom.errorCounters?.querySelectorAll(".finding-cell").forEach((cell) => {
     cell.classList.remove("active");
     cell.setAttribute("aria-pressed", "false");
   });

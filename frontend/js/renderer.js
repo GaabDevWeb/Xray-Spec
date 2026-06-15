@@ -4,19 +4,19 @@ import { highlightEvidence } from "./highlight.js";
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
 const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
 
-const GAP_TAG = {
-  critical: "[CRITICAL GAP]",
-  high: "[HIGH GAP]",
-  medium: "[MEDIUM GAP]",
-  low: "[LOW GAP]",
+const SEV_LABEL = {
+  critical: "CRITICAL",
+  high: "HIGH",
+  medium: "MEDIUM",
+  low: "LOW",
 };
 
-const COUNTER_FILTERS = {
-  GAPS: "gaps",
-  AMBIGUITIES: "ambiguities",
-  ASSUMPTIONS: "assumptions",
-  SUGGESTIONS: "suggestions",
-};
+const COUNTER_CONFIG = [
+  { filter: "gaps", label: "CRITICAL FINDINGS", countKey: "gaps" },
+  { filter: "ambiguities", label: "AMBIGUITIES", countKey: "ambiguities" },
+  { filter: "assumptions", label: "HIDDEN ASSUMPTIONS", countKey: "assumptions" },
+  { filter: "suggestions", label: "SUGGESTIONS", countKey: "suggestions" },
+];
 
 function el(tag, className, html) {
   const node = document.createElement(tag);
@@ -31,22 +31,37 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-function gapTagClass(severity) {
-  if (severity === "critical" || severity === "high") return "log-tag log-tag--critical";
-  return "log-tag log-tag--warning";
+function healthBand(total) {
+  if (total <= 25) return { label: "CRITICAL", className: "health-critical" };
+  if (total <= 50) return { label: "DEGRADED", className: "health-degraded" };
+  if (total <= 75) return { label: "WARNING", className: "health-warning" };
+  return { label: "HEALTHY", className: "health-healthy" };
 }
 
-function telemetryStatus(total) {
-  if (total <= 50) {
-    return { text: "[ SYSTEM STATUS: UNSTABLE / CRITICAL ]", className: "status-critical" };
+function gapTagClass(severity) {
+  return `sev-badge sev-badge--${severity || "medium"}`;
+}
+
+function buildRationale(analysis) {
+  const gaps = analysis.gaps ?? [];
+  const top = [...gaps].sort(
+    (a, b) => (SEV_ORDER[a.severity] ?? 9) - (SEV_ORDER[b.severity] ?? 9)
+  )[0];
+
+  if (top) {
+    return `Primary failure: ${top.description}`;
   }
-  if (total <= 75) {
-    return { text: "[ SPEC HEALTH: DEGRADED / WARNING ]", className: "status-warning" };
+
+  const ambig = analysis.ambiguities?.length ?? 0;
+  const assum = analysis.assumptions?.length ?? 0;
+  if (ambig || assum) {
+    const parts = [];
+    if (ambig) parts.push(`${ambig} structural ambiguit${ambig !== 1 ? "ies" : "y"}`);
+    if (assum) parts.push(`${assum} undeclared assumption${assum !== 1 ? "s" : ""}`);
+    return parts.join(" · ");
   }
-  if (total <= 90) {
-    return { text: "[ SPEC HEALTH: NOMINAL / STABLE ]", className: "status-stable" };
-  }
-  return { text: "[ SPEC HEALTH: OPTIMAL / CLEAR ]", className: "status-optimal" };
+
+  return "No structural failures detected in this scan.";
 }
 
 /**
@@ -57,35 +72,42 @@ function telemetryStatus(total) {
 export function render(analysis, ctx = {}) {
   renderTelemetry(analysis, ctx.previousScore);
   renderDimensionBars("dimension-bars", analysis.score.dimensions);
+  renderReviewFeature(analysis, ctx);
   renderStream(analysis, ctx);
 }
 
 function renderTelemetry(analysis, previousScore) {
   const score = analysis.score;
-  const statusEl = document.getElementById("score-status");
+  const bandEl = document.getElementById("health-band");
   const valueEl = document.getElementById("score-value");
   const delta = document.getElementById("score-delta");
+  const rationale = document.getElementById("telemetry-rationale");
   const counters = document.getElementById("error-counters");
 
-  const status = telemetryStatus(score.total);
-  statusEl.textContent = status.text;
-  statusEl.className = `telemetry-status mono ${status.className}`;
+  const band = healthBand(score.total);
+  bandEl.textContent = band.label;
+  bandEl.className = `health-band mono ${band.className}`;
   valueEl.textContent = score.total;
+  rationale.textContent = buildRationale(analysis);
 
   counters.innerHTML = "";
-  const counts = [
-    ["GAPS", analysis.gaps?.length ?? 0],
-    ["AMBIGUITIES", analysis.ambiguities?.length ?? 0],
-    ["ASSUMPTIONS", analysis.assumptions?.length ?? 0],
-    ["SUGGESTIONS", analysis.suggestions?.length ?? 0],
-  ];
-  counts.forEach(([label, count]) => {
-    const btn = el("button", "counter-cell");
+  const counts = {
+    gaps: analysis.gaps?.length ?? 0,
+    ambiguities: analysis.ambiguities?.length ?? 0,
+    assumptions: analysis.assumptions?.length ?? 0,
+    suggestions: analysis.suggestions?.length ?? 0,
+  };
+
+  COUNTER_CONFIG.forEach(({ filter, label, countKey }) => {
+    const count = counts[countKey];
+    const btn = el("button", "finding-cell");
     btn.type = "button";
-    btn.dataset.filter = COUNTER_FILTERS[label];
+    btn.dataset.filter = filter;
     btn.setAttribute("aria-pressed", "false");
     btn.setAttribute("aria-label", `Filtrar ${label.toLowerCase()}`);
-    btn.textContent = `${label}: ${count}`;
+    btn.innerHTML =
+      `<span class="finding-count">${count}</span>` +
+      `<span class="finding-label">${label}</span>`;
     counters.appendChild(btn);
   });
 
@@ -107,29 +129,43 @@ function renderTelemetry(analysis, previousScore) {
   }
 }
 
+function renderReviewFeature(analysis, ctx) {
+  const panel = document.getElementById("review-feature");
+  panel.innerHTML = "";
+
+  const head = el("div", "review-feature-head");
+  head.innerHTML =
+    `<span class="review-feature-tag mono">// SPEC REVISION</span>` +
+    `<span class="review-feature-hint mono">before / after</span>`;
+  panel.appendChild(head);
+
+  const body = el("div", "review-feature-body");
+  body.appendChild(buildDiff(analysis, ctx));
+  panel.appendChild(body);
+}
+
 function renderStream(analysis, ctx) {
   const stream = document.getElementById("inspection-stream");
   stream.innerHTML = "";
 
   const sections = [
-    ["gaps", "GAPS", () => buildGaps(analysis.gaps, ctx.textarea)],
+    ["gaps", "FINDINGS", () => buildGaps(analysis.gaps, ctx.textarea)],
     ["ambiguities", "AMBIGUITIES", () => buildAmbiguities(analysis.ambiguities, ctx.textarea)],
     ["assumptions", "ASSUMPTIONS", () => buildAssumptions(analysis.assumptions)],
     ["suggestions", "SUGGESTIONS", () => buildSuggestions(analysis.suggestions)],
-    ["diff", "CODE REVIEW", () => buildDiff(analysis, ctx)],
   ];
 
   sections.forEach(([id, title, fn]) => {
     const section = el("section", "stream-section");
     section.dataset.section = id;
 
-    const head = el("div", "stream-section-head");
-    head.innerHTML = `<span class="stream-section-tag mono">// ${title}</span>`;
-    section.appendChild(head);
+    const sectionHead = el("div", "stream-section-head");
+    sectionHead.innerHTML = `<span class="stream-section-tag mono">// ${title}</span>`;
+    section.appendChild(sectionHead);
 
-    const body = el("div", "stream-section-body");
-    body.appendChild(fn());
-    section.appendChild(body);
+    const sectionBody = el("div", "stream-section-body");
+    sectionBody.appendChild(fn());
+    section.appendChild(sectionBody);
     stream.appendChild(section);
   });
 }
@@ -137,16 +173,17 @@ function renderStream(analysis, ctx) {
 function buildGaps(gaps, textarea) {
   const frag = document.createDocumentFragment();
   if (!gaps?.length) {
-    frag.appendChild(emptyLog("no gaps detected"));
+    frag.appendChild(emptyLog("no critical findings"));
     return frag;
   }
 
   [...gaps]
     .sort((a, b) => (SEV_ORDER[a.severity] ?? 9) - (SEV_ORDER[b.severity] ?? 9))
     .forEach((gap) => {
-      const entry = el("div", "log-entry clickable");
+      const sev = gap.severity || "medium";
+      const entry = el("div", `log-entry log-entry--${sev} clickable`);
       entry.innerHTML =
-        `<span class="${gapTagClass(gap.severity)}">${GAP_TAG[gap.severity] || "[GAP]"}</span>` +
+        `<span class="${gapTagClass(sev)}">${SEV_LABEL[sev] || "GAP"}</span>` +
         `<div class="log-body">` +
         `<p class="log-msg">${escapeHtml(gap.description)}</p>` +
         `<p class="log-detail">${escapeHtml(gap.question)}</p>` +
@@ -166,12 +203,12 @@ function buildAmbiguities(ambiguities, textarea) {
   }
 
   ambiguities.forEach((amb) => {
+    const entry = el("div", "log-entry log-entry--medium");
     const interps = (amb.interpretations || [])
       .map((i) => `<li>${escapeHtml(i)}</li>`)
       .join("");
-    const entry = el("div", "log-entry");
     entry.innerHTML =
-      `<span class="log-tag log-tag--warning">[WARNING AMBIGUITY]</span>` +
+      `<span class="sev-badge sev-badge--medium">AMBIGUITY</span>` +
       `<div class="log-body">` +
       `<p class="log-msg mono">"${escapeHtml(amb.term)}"</p>` +
       `<p class="log-detail">${escapeHtml(amb.context)}</p>` +
@@ -197,9 +234,9 @@ function buildAssumptions(assumptions) {
   }
 
   assumptions.forEach((asm) => {
-    const entry = el("div", "log-entry");
+    const entry = el("div", "log-entry log-entry--high");
     entry.innerHTML =
-      `<span class="log-tag log-tag--warning">[HIDDEN ASSUMPTION]</span>` +
+      `<span class="sev-badge sev-badge--high">ASSUMPTION</span>` +
       `<div class="log-body">` +
       `<p class="log-msg">${escapeHtml(asm.assumption)}</p>` +
       `<p class="log-detail">risk: ${escapeHtml(asm.risk)}</p>` +
@@ -220,15 +257,10 @@ function buildSuggestions(suggestions) {
   [...suggestions]
     .sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9))
     .forEach((s) => {
-      const tag =
-        s.priority === "high"
-          ? "[HIGH PRIORITY]"
-          : s.priority === "medium"
-            ? "[MEDIUM PRIORITY]"
-            : "[LOW PRIORITY]";
-      const entry = el("div", "log-entry");
+      const pri = s.priority === "high" ? "high" : s.priority === "medium" ? "medium" : "low";
+      const entry = el("div", `log-entry log-entry--${pri}`);
       entry.innerHTML =
-        `<span class="log-tag log-tag--info">${tag}</span>` +
+        `<span class="sev-badge sev-badge--${pri}">${pri.toUpperCase()}</span>` +
         `<div class="log-body">` +
         `<p class="log-msg">${escapeHtml(s.text)}</p>` +
         `<p class="log-meta">${escapeHtml(s.dimension)}</p>` +
@@ -247,11 +279,11 @@ function buildDiff(analysis, ctx) {
     el(
       "p",
       "diff-notice mono",
-      "review required — resolve all <strong>[A DEFINIR]</strong> markers before adoption"
+      "Resolve all <strong>[A DEFINIR]</strong> markers before adoption — this is the revised spec."
     )
   );
 
-  const split = el("div", "diff-split");
+  const split = el("div", "diff-split diff-split--featured");
   split.appendChild(buildDiffPane("before", "original", originalText));
   split.appendChild(buildDiffPane("after", "proposed", improvedText, originalText));
   frag.appendChild(split);

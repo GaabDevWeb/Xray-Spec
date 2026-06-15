@@ -95,19 +95,21 @@
 
     <section id="results" class="scan-results" aria-label="Resultados da inspeção" hidden>
       <header class="telemetry" id="telemetry-header">
-        <div class="telemetry-row">
-          <span id="score-status" class="telemetry-status mono">[ SYSTEM STATUS: — ]</span>
-          <span id="score-delta" class="score-delta" hidden></span>
+        <div class="telemetry-hero">
+          <span id="health-band" class="health-band mono" aria-live="polite">—</span>
+          <div class="telemetry-score-compact mono">
+            <span id="score-value" class="telemetry-score-small">0</span>
+            <span class="telemetry-max">/100</span>
+            <span id="score-delta" class="score-delta" hidden></span>
+          </div>
         </div>
-        <div class="telemetry-score-row">
-          <span class="telemetry-label mono">SPEC HEALTH</span>
-          <span id="score-value" class="telemetry-score">0</span>
-          <span class="telemetry-max mono">/100</span>
-        </div>
-        <div id="error-counters" class="error-counters mono" aria-label="Contadores de problemas"></div>
+        <p id="telemetry-rationale" class="telemetry-rationale"></p>
+        <div id="error-counters" class="finding-counters mono" aria-label="Contadores de problemas"></div>
       </header>
 
       <div id="dimension-bars" class="dimension-bars" aria-label="Dimensões"></div>
+
+      <section id="review-feature" class="review-feature" aria-label="Revisão before/after"></section>
 
       <div id="inspection-stream" class="inspection-stream" aria-label="Log de inspeção"></div>
     </section>
