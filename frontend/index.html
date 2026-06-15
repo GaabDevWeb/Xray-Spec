@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Xray — Spec Inspection</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.0.3/400.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.0.3/500.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.0.3/600.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.0.3/700.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5.0.21/400.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5.0.21/500.css" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.5"/>
+          <line x1="9" y1="2" x2="9" y2="16" stroke="currentColor" stroke-width="1"/>
+          <line x1="2" y1="9" x2="16" y2="9" stroke="currentColor" stroke-width="1"/>
+        </svg>
+      </span>
+      <div class="brand-text">
+        <h1>XRAY</h1>
+        <span class="brand-tagline">spec inspection</span>
+      </div>
+    </div>
+    <nav class="header-actions" aria-label="Ações">
+      <button id="btn-history" type="button" class="ghost-btn">Histórico</button>
+      <button id="btn-help" type="button" class="ghost-btn" aria-label="Ajuda sobre spec engineering">?</button>
+    </nav>
+  </header>
+
+  <div id="offline-banner" class="banner banner-offline" role="status" hidden>
+    Sem conexão com o serviço de análise. Histórico acessível; scan desabilitado.
+  </div>
+
+  <main class="container">
+    <section class="scan-input" aria-label="Entrada de especificação">
+      <div class="section-eyebrow">Inspection target</div>
+
+      <div class="input-toolbar">
+        <label for="type-select" class="field-label">Tipo</label>
+        <select id="type-select" class="select">
+          <option value="prompt">Prompt</option>
+          <option value="requirement">Requisito</option>
+          <option value="briefing">Briefing</option>
+        </select>
+      </div>
+
+      <textarea
+        id="spec-input"
+        class="spec-textarea mono"
+        rows="10"
+        placeholder="Cole ou digite a especificação a inspecionar…"
+        aria-describedby="input-hint char-counter"></textarea>
+
+      <div class="input-footer">
+        <span id="input-hint" class="input-hint" aria-live="polite"></span>
+        <span id="char-counter" class="char-counter mono">0 / 10.000</span>
+      </div>
+
+      <div class="input-actions">
+        <span class="shortcut-hint mono">⌘/Ctrl + Enter</span>
+        <button id="btn-analyze" type="button" class="primary-btn" disabled>
+          <span class="btn-label">Escanear</span>
+        </button>
+      </div>
+    </section>
+
+    <div id="error-region" class="error-region" role="alert" aria-live="assertive" hidden>
+      <div class="error-content">
+        <span class="error-label mono">SCAN FAILED</span>
+        <p id="error-message"></p>
+      </div>
+      <button id="btn-retry" type="button" class="secondary-btn" hidden>Tentar novamente</button>
+    </div>
+
+    <section id="skeleton" class="scan-results skeleton" aria-hidden="true" hidden>
+      <div class="skeleton-hero">
+        <div class="skeleton-line skeleton-sm"></div>
+        <div class="skeleton-line skeleton-xl"></div>
+        <div class="skeleton-line skeleton-md"></div>
+      </div>
+      <div class="skeleton-bars">
+        <div class="skeleton-line"></div>
+        <div class="skeleton-line"></div>
+        <div class="skeleton-line"></div>
+        <div class="skeleton-line"></div>
+      </div>
+    </section>
+
+    <section id="results" class="scan-results" aria-label="Resultados da inspeção" hidden>
+      <header class="scan-hero">
+        <span class="scan-eyebrow mono">SPEC HEALTH</span>
+        <div class="scan-score-row">
+          <div id="score-badge" class="scan-score">
+            <span id="score-value">0</span>
+          </div>
+          <div class="scan-meta">
+            <span id="score-label" class="scan-band">—</span>
+            <span id="score-delta" class="score-delta" hidden></span>
+          </div>
+        </div>
+        <p id="scan-diagnosis" class="scan-diagnosis"></p>
+      </header>
+
+      <div id="dimension-bars" class="dimension-bars" aria-label="Dimensões"></div>
+
+      <nav class="tabs" role="tablist" aria-label="Findings">
+        <button class="tab-btn active" role="tab" data-tab="gaps" aria-selected="true">Lacunas</button>
+        <button class="tab-btn" role="tab" data-tab="ambiguities" aria-selected="false">Ambiguidades</button>
+        <button class="tab-btn" role="tab" data-tab="assumptions" aria-selected="false">Suposições</button>
+        <button class="tab-btn" role="tab" data-tab="suggestions" aria-selected="false">Sugestões</button>
+        <button class="tab-btn" role="tab" data-tab="dimensions" aria-selected="false">Dimensões</button>
+        <button class="tab-btn" role="tab" data-tab="diff" aria-selected="false">Revisão</button>
+      </nav>
+
+      <div class="tab-panels">
+        <div class="tab-panel active" data-panel="gaps" role="tabpanel"></div>
+        <div class="tab-panel" data-panel="ambiguities" role="tabpanel"></div>
+        <div class="tab-panel" data-panel="assumptions" role="tabpanel"></div>
+        <div class="tab-panel" data-panel="suggestions" role="tabpanel"></div>
+        <div class="tab-panel" data-panel="dimensions" role="tabpanel"></div>
+        <div class="tab-panel" data-panel="diff" role="tabpanel"></div>
+      </div>
+    </section>
+  </main>
+
+  <aside id="history-panel" class="drawer" aria-hidden="true" hidden>
+    <div class="drawer-header">
+      <div>
+        <span class="drawer-eyebrow mono">ARCHIVE</span>
+        <h2>Histórico</h2>
+      </div>
+      <div class="drawer-header-actions">
+        <button id="btn-clear-history" type="button" class="ghost-btn danger">Limpar</button>
+        <button id="btn-close-history" type="button" class="ghost-btn" aria-label="Fechar">✕</button>
+      </div>
+    </div>
+    <ul id="history-list" class="history-list"></ul>
+    <p id="history-empty" class="history-empty">Nenhuma inspeção salva.</p>
+  </aside>
+
+  <aside id="help-panel" class="drawer" aria-hidden="true" hidden>
+    <div class="drawer-header">
+      <div>
+        <span class="drawer-eyebrow mono">ABOUT</span>
+        <h2>Spec engineering</h2>
+      </div>
+      <button id="btn-close-help" type="button" class="ghost-btn" aria-label="Fechar">✕</button>
+    </div>
+    <div class="help-content">
+      <p>O Xray inspeciona a qualidade da sua especificação antes de enviá-la a uma IA ou time de desenvolvimento.</p>
+      <p>Ele não reescreve por você: revela lacunas, ambiguidades e suposições ocultas em seis dimensões, com um score de 0 a 100.</p>
+      <p>Um score baixo indica onde clarificar — não é reprovação. Edite e re-escaneie para medir progresso.</p>
+    </div>
+  </aside>
+
+  <div id="overlay" class="overlay" hidden></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
