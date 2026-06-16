@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -9,11 +10,26 @@ from app.config import get_settings
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.routes import analyze, health
 
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("xray")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    settings = get_settings()
+    if err := settings.config_error():
+        logger.warning("LLM configuration issue: %s", err)
+    else:
+        logger.info(
+            "LLM provider=%s model=%s",
+            settings.xray_llm_provider,
+            settings.resolved_default_model,
+        )
+    yield
+
 
 settings = get_settings()
 
-app = FastAPI(title="Xray Spec Analyzer", version="1.0.0")
+app = FastAPI(title="Xray Spec Analyzer", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(RateLimitMiddleware, limit=settings.xray_rate_limit)
 app.add_middleware(

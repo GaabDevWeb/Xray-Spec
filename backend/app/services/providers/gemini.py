@@ -3,13 +3,13 @@ import logging
 import httpx
 
 from app.config import get_settings
-from app.services.llm_errors import LLMTimeout, LLMUnavailable
+from app.services.llm_errors import LLMTimeout, LLMUnavailable, format_provider_error
 
 logger = logging.getLogger("xray.gemini")
 
+PROVIDER_NAME = "gemini"
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
-# Aliases amigáveis → slug real na API (ListModels).
 MODEL_ALIASES: dict[str, str] = {
     "gemini-3-flash": "gemini-3-flash-preview",
     "gemini-3-pro": "gemini-3-pro-preview",
@@ -28,25 +28,22 @@ def _error_message(status_code: int, model: str, body: dict) -> str:
 
     if status_code == 404:
         return (
-            f"Modelo '{model}' não encontrado na API Gemini. "
-            "Verifique XRAY_DEFAULT_MODEL ou use gemini-2.0-flash / gemini-3-flash-preview."
+            f"Model '{model}' not found. "
+            "Check XRAY_DEFAULT_MODEL or try gemini-2.0-flash / gemini-3-flash-preview."
         )
     if status_code == 403:
-        return (
-            "Acesso negado ao modelo Gemini neste projeto. "
-            "Confirme a chave em aistudio.google.com/apikey e permissões do modelo."
-        )
+        return "Access denied. Verify GEMINI_API_KEY and model permissions in Google AI Studio."
+    if status_code == 401:
+        return upstream or "Invalid API key."
     if status_code == 429:
-        return (
-            "Cota da API Gemini excedida. Aguarde alguns minutos ou verifique billing/plano no Google AI Studio."
-        )
+        return "Quota exceeded. Wait a few minutes or check billing in Google AI Studio."
     if upstream:
         logger.warning("Gemini error %s: %s", status_code, upstream[:200])
-    return "Serviço de análise indisponível no momento."
+        return str(upstream)
+    return "Service unavailable."
 
 
 def _build_payload(messages: list[dict]) -> dict:
-    """Converte mensagens OpenAI-style (system/user/assistant) para o formato Gemini."""
     system_text = next((m["content"] for m in messages if m["role"] == "system"), None)
     contents = []
     for msg in messages:
@@ -68,14 +65,14 @@ def _build_payload(messages: list[dict]) -> dict:
 
 
 async def chat_completion(messages: list[dict], model: str | None = None) -> str:
-    """Chama a API Gemini (generateContent) e devolve o texto da resposta."""
     settings = get_settings()
+    chosen = _resolve_model(model)
     if not settings.gemini_api_key:
-        logger.warning("GEMINI_API_KEY not configured")
-        raise LLMUnavailable("GEMINI_API_KEY não configurada no servidor.")
+        raise LLMUnavailable(
+            format_provider_error(PROVIDER_NAME, chosen, "API key not configured (GEMINI_API_KEY).")
+        )
 
-    chosen_model = _resolve_model(model)
-    url = f"{GEMINI_BASE}/models/{chosen_model}:generateContent"
+    url = f"{GEMINI_BASE}/models/{chosen}:generateContent"
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": settings.gemini_api_key,
@@ -89,26 +86,31 @@ async def chat_completion(messages: list[dict], model: str | None = None) -> str
         raise LLMTimeout from exc
     except httpx.HTTPError as exc:
         logger.warning("Gemini connection error: %s", type(exc).__name__)
-        raise LLMUnavailable from exc
+        raise LLMUnavailable(
+            format_provider_error(PROVIDER_NAME, chosen, "Connection error.")
+        ) from exc
 
     if response.status_code != 200:
         try:
             body = response.json()
         except ValueError:
             body = {}
-        logger.warning("Gemini responded %s for model %s", response.status_code, chosen_model)
-        raise LLMUnavailable(_error_message(response.status_code, chosen_model, body))
+        logger.warning("Gemini responded %s for model %s", response.status_code, chosen)
+        raise LLMUnavailable(
+            format_provider_error(PROVIDER_NAME, chosen, _error_message(response.status_code, chosen, body))
+        )
 
     data = response.json()
     try:
         return data["candidates"][0]["content"]["parts"][0]["text"]
     except (KeyError, IndexError, TypeError) as exc:
         logger.warning("Unexpected Gemini payload shape")
-        raise LLMUnavailable from exc
+        raise LLMUnavailable(
+            format_provider_error(PROVIDER_NAME, chosen, "Unexpected response format.")
+        ) from exc
 
 
 async def probe() -> bool:
-    """Verifica se generateContent responde (não basta listar modelos)."""
     settings = get_settings()
     if not settings.gemini_api_key:
         return False
@@ -126,7 +128,6 @@ async def probe() -> bool:
                 json=payload,
                 headers={"x-goog-api-key": settings.gemini_api_key, "Content-Type": "application/json"},
             )
-        # 200 = ok; 429 = credencial válida mas sem cota (ainde "conectado")
         return response.status_code in (200, 429)
     except httpx.HTTPError:
         return False

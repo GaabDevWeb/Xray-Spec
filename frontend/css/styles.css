@@ -34,6 +34,14 @@
 
   --radius: 2px;
   --transition: 0.12s ease;
+
+  /* Scroll — telemetry track */
+  --scroll-size: 5px;
+  --scroll-size-input: 7px;
+  --scroll-thumb: rgba(91, 136, 178, 0.22);
+  --scroll-thumb-hover: rgba(91, 136, 178, 0.42);
+  --scroll-thumb-active: rgba(91, 136, 178, 0.72);
+  --scroll-track: rgba(218, 218, 218, 0.03);
 }
 
 * { box-sizing: border-box; }
@@ -54,6 +62,73 @@ html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+  scroll-padding-top: 2.75rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* ── Scrollbars — thin accent track (global) ── */
+*,
+*::before,
+*::after {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
+}
+
+*::-webkit-scrollbar {
+  width: var(--scroll-size);
+  height: var(--scroll-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scroll-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scroll-thumb);
+  border-radius: 0;
+  border: 1px solid rgba(91, 136, 178, 0.06);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scroll-thumb-hover);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background-color: var(--scroll-thumb-active);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Scroll regions — contain chain + edge fade */
+.scroll-region,
+.diff-lines {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  background:
+    linear-gradient(var(--bg) 28%, transparent) center top / 100% 10px no-repeat local,
+    linear-gradient(transparent, var(--bg) 72%) center bottom / 100% 10px no-repeat local,
+    var(--bg);
+}
+
+.history-list,
+.help-content {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  background:
+    linear-gradient(var(--surface) 28%, transparent) center top / 100% 10px no-repeat local,
+    linear-gradient(transparent, var(--surface) 72%) center bottom / 100% 10px no-repeat local,
+    var(--surface);
 }
 
 body {
@@ -280,6 +355,7 @@ button:focus-visible {
   width: 100%;
   resize: vertical;
   min-height: 160px;
+  max-height: min(52vh, 28rem);
   padding: var(--space-3);
   background: var(--surface);
   border: 1px solid var(--border-strong);
@@ -288,6 +364,12 @@ button:focus-visible {
   font-family: var(--font-code);
   font-size: 0.75rem;
   line-height: 1.55;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.spec-textarea::-webkit-scrollbar {
+  width: var(--scroll-size-input);
 }
 
 .spec-textarea::placeholder {
@@ -344,6 +426,7 @@ button:focus-visible {
   border: 1px solid var(--border-strong);
   border-left: 2px solid var(--accent);
   border-radius: var(--radius);
+  scroll-margin-top: 2.75rem;
 }
 
 .error-content p {
@@ -359,6 +442,7 @@ button:focus-visible {
   gap: var(--space-4);
   padding-top: var(--space-2);
   border-top: 1px solid var(--border);
+  scroll-margin-top: 2.75rem;
 }
 
 /* Telemetry header — clarity first, score secondary */
@@ -797,7 +881,6 @@ button:focus-visible {
 .diff-lines {
   max-height: 320px;
   overflow: auto;
-  background: var(--bg);
 }
 
 .diff-line {
@@ -900,6 +983,7 @@ button:focus-visible {
   z-index: 30;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .drawer-header {
@@ -943,6 +1027,7 @@ button:focus-visible {
   padding: var(--space-2);
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
 }
 
 .history-item {
@@ -1004,6 +1089,8 @@ button:focus-visible {
 .help-content {
   padding: var(--space-4);
   overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .help-content p {
